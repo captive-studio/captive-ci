@@ -6,6 +6,7 @@ on:
       ruby-image:
         required: false
         type: string
+        # renovate: datasource=docker depName=ghcr.io/captive-studio/ruby-ci
         default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:fc939c42fb4498511987a0ba3965c2ee1474f63bf9646e6a2b301b8b46ab4fc8
 
       lint-command:
