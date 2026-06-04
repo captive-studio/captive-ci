@@ -1,0 +1,120 @@
+name: Ruby CI
+
+on:
+  workflow_call:
+    inputs:
+      ruby-image:
+        required: false
+        type: string
+        default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:fc939c42fb4498511987a0ba3965c2ee1474f63bf9646e6a2b301b8b46ab4fc8
+
+      lint-command:
+        required: false
+        type: string
+        default: bundle exec rubocop -f github
+
+      test-command:
+        required: false
+        type: string
+        default: bundle exec rspec
+
+      audit-command:
+        required: false
+        type: string
+        default: bundle exec bundler-audit
+
+      smoke-command:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  scan_ruby:
+    runs-on: captive-small
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Cache gems
+        uses: actions/cache@v5
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
+
+      - name: Scan for known security vulnerabilities in gems
+        run: ${{ inputs.audit-command }}
+
+  lint:
+    runs-on: captive-small
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+      RUBOCOP_CACHE_ROOT: tmp/rubocop
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Cache gems
+        uses: actions/cache@v5
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
+
+      - name: Prepare RuboCop cache
+        uses: actions/cache@v5
+        env:
+          DEPENDENCIES_HASH: ${{ hashFiles('.tool-versions', '.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock') }}
+        with:
+          path: ${{ env.RUBOCOP_CACHE_ROOT }}
+          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
+          restore-keys: |
+            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
+
+      - name: Lint code
+        run: ${{ inputs.lint-command }}
+
+  test:
+    runs-on: captive-small
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Cache gems
+        uses: actions/cache@v5
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+      - name: Smoke test
+        if: inputs.smoke-command != ''
+        run: ${{ inputs.smoke-command }}
