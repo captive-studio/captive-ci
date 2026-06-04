@@ -12,7 +12,7 @@ on:
       lint-command:
         required: false
         type: string
-        default: bundle exec rubocop -f github
+        default: rubocop -f github
 
       test-command:
         required: false
@@ -22,7 +22,7 @@ on:
       audit-command:
         required: false
         type: string
-        default: bundle exec bundler-audit
+        default: bundler-audit
 
       smoke-command:
         required: false
