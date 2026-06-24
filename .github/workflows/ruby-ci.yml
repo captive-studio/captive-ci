@@ -119,3 +119,28 @@ jobs:
       - name: Smoke test
         if: inputs.smoke-command != ''
         run: ${{ inputs.smoke-command }}
+
+  quality:
+    runs-on: captive-small
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Cache gems
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
+
+      - name: Analyse code quality
+        run: bundle exec rubycritic --no-browser
