@@ -6,6 +6,10 @@ concurrency:
 
 on:
   workflow_call:
+    secrets:
+      rails-master-key:
+        required: false
+
     inputs:
       ruby-image:
         required: false
@@ -93,6 +97,25 @@ on:
         required: false
         type: string
         default: bundle exec rspec spec/system
+
+      # db-setup-command charge le schéma (db:schema:load) pour aller vite dans le job
+      # test ; use-migration-check ajoute un job séparé qui rejoue l'historique complet
+      # des migrations (db:migrate), pour détecter une migration cassée que schema:load
+      # contournerait silencieusement.
+      use-migration-check:
+        required: false
+        type: boolean
+        default: false
+
+      migrate-command:
+        required: false
+        type: string
+        default: bin/rails db:create db:migrate
+
+      seed-command:
+        required: false
+        type: string
+        default: bin/rails db:seed
 
 jobs:
   scan_ruby:
@@ -223,6 +246,7 @@ jobs:
       BUNDLE_PATH: vendor/bundle
       RAILS_ENV: test
       DATABASE_URL: ${{ inputs.database-url }}
+      RAILS_MASTER_KEY: ${{ secrets.rails-master-key }}
 
     services:
       postgres:
@@ -290,6 +314,7 @@ jobs:
       BUNDLE_PATH: vendor/bundle
       RAILS_ENV: test
       DATABASE_URL: ${{ inputs.database-url }}
+      RAILS_MASTER_KEY: ${{ secrets.rails-master-key }}
 
     services:
       postgres:
@@ -342,3 +367,55 @@ jobs:
 
       - name: Run system tests
         run: ${{ inputs.system-test-command }}
+
+  migrate:
+    if: inputs.use-migration-check
+    runs-on: self-hosted
+    timeout-minutes: 20
+    container:
+      image: ${{ inputs.rails-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+      RAILS_ENV: test
+      DATABASE_URL: ${{ inputs.database-url }}
+      RAILS_MASTER_KEY: ${{ secrets.rails-master-key }}
+
+    services:
+      postgres:
+        image: ${{ inputs.postgres-image }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: ${{ inputs.redis-image }}
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
+
+      - name: Run migrations from scratch
+        run: ${{ inputs.migrate-command }}
+
+      - name: Seed database
+        run: ${{ inputs.seed-command }}
