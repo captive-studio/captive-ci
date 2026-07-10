@@ -104,7 +104,19 @@ jobs:
       BUNDLE_PATH: vendor/bundle
 
     steps:
-      - uses: ./.github/actions/setup-ruby
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
 
       - name: Scan for known security vulnerabilities in gems
         run: ${{ inputs.audit-command }}
@@ -122,7 +134,19 @@ jobs:
       RUBOCOP_CACHE_ROOT: tmp/rubocop
 
     steps:
-      - uses: ./.github/actions/setup-ruby
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
 
       - name: Prepare RuboCop cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -146,7 +170,19 @@ jobs:
       BUNDLE_PATH: vendor/bundle
 
     steps:
-      - uses: ./.github/actions/setup-ruby
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
 
       - name: Analyse code quality
         run: bundle exec rubycritic --no-browser
@@ -161,7 +197,19 @@ jobs:
       BUNDLE_PATH: vendor/bundle
 
     steps:
-      - uses: ./.github/actions/setup-ruby
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
 
       - name: Scan for security vulnerabilities in JavaScript dependencies
         run: ${{ inputs.js-audit-command }}
@@ -196,7 +244,19 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: ./.github/actions/setup-ruby
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
 
       - name: Setup Node
         if: inputs.assets-build-command != ''
@@ -251,7 +311,19 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: ./.github/actions/setup-ruby
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Cache gems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: vendor/bundle
+          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: |
+            gems-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bundle install --quiet
 
       - name: Setup Node
         if: inputs.assets-build-command != ''
