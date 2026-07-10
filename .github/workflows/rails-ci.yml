@@ -15,13 +15,13 @@ on:
         required: false
         type: string
         # renovate: datasource=docker depName=ghcr.io/captive-studio/ruby-ci
-        default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:3bfc455e62bce2e63a9c9df2b2f59d46d6dabc65f5656b9b0ef06c448621f296
+        default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:2bd9bd7943eb97da523dbc5e73e712dfaa168bce7450cbb1437986b86a581c97
 
       rails-image:
         required: false
         type: string
         # renovate: datasource=docker depName=ghcr.io/captive-studio/rails-ci
-        default: ghcr.io/captive-studio/rails-ci:4.0.5@sha256:8bceb578fd54219c932fba5c4bb3342ab19e1b48e5022156c25bb131b96ffc97
+        default: ghcr.io/captive-studio/rails-ci:4.0.5@sha256:2b9fadaae0f58df1b03b48e06e27adbeb06c4c4a748d238b69eb273ab36f108e
 
       lint-command:
         required: false
@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: brakeman -q
+
+      quality-command:
+        required: false
+        type: string
+        default: rubycritic --no-browser
 
       js-audit-command:
         required: false
@@ -185,6 +190,7 @@ jobs:
         run: ${{ inputs.lint-command }}
 
   quality:
+    if: inputs.quality-command != ''
     runs-on: captive-small
     timeout-minutes: 10
     container:
@@ -208,7 +214,7 @@ jobs:
         run: bundle install --quiet
 
       - name: Analyse code quality
-        run: bundle exec rubycritic --no-browser
+        run: ${{ inputs.quality-command }}
 
   scan_js:
     if: inputs.js-audit-command != ''

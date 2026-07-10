@@ -11,7 +11,7 @@ on:
         required: false
         type: string
         # renovate: datasource=docker depName=ghcr.io/captive-studio/ruby-ci
-        default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:3bfc455e62bce2e63a9c9df2b2f59d46d6dabc65f5656b9b0ef06c448621f296
+        default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:2bd9bd7943eb97da523dbc5e73e712dfaa168bce7450cbb1437986b86a581c97
 
       lint-command:
         required: false
@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: ""
+
+      quality-command:
+        required: false
+        type: string
+        default: rubycritic --no-browser
 
 jobs:
   scan_ruby:
@@ -128,6 +133,7 @@ jobs:
         run: ${{ inputs.smoke-command }}
 
   quality:
+    if: inputs.quality-command != ''
     runs-on: captive-small
     timeout-minutes: 10
     container:
@@ -151,4 +157,4 @@ jobs:
         run: bundle install --quiet
 
       - name: Analyse code quality
-        run: bundle exec rubycritic --no-browser
+        run: ${{ inputs.quality-command }}
