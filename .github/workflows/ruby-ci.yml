@@ -1,5 +1,9 @@
 name: Ruby CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_call:
     inputs:
@@ -32,31 +36,21 @@ on:
 jobs:
   scan_ruby:
     runs-on: captive-small
+    timeout-minutes: 10
     container:
       image: ${{ inputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Cache gems
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: vendor/bundle
-          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
-          restore-keys: |
-            gems-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: bundle install --quiet
+      - uses: ./.github/actions/setup-ruby
 
       - name: Scan for known security vulnerabilities in gems
         run: ${{ inputs.audit-command }}
 
   lint:
     runs-on: captive-small
+    timeout-minutes: 10
     container:
       image: ${{ inputs.ruby-image }}
     env:
@@ -64,19 +58,7 @@ jobs:
       RUBOCOP_CACHE_ROOT: tmp/rubocop
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Cache gems
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: vendor/bundle
-          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
-          restore-keys: |
-            gems-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: bundle install --quiet
+      - uses: ./.github/actions/setup-ruby
 
       - name: Prepare RuboCop cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -93,25 +75,14 @@ jobs:
 
   test:
     runs-on: captive-small
+    timeout-minutes: 10
     container:
       image: ${{ inputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Cache gems
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: vendor/bundle
-          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
-          restore-keys: |
-            gems-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: bundle install --quiet
+      - uses: ./.github/actions/setup-ruby
 
       - name: Run tests
         run: ${{ inputs.test-command }}
@@ -122,25 +93,14 @@ jobs:
 
   quality:
     runs-on: captive-small
+    timeout-minutes: 10
     container:
       image: ${{ inputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
-      - name: Cache gems
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: vendor/bundle
-          key: gems-${{ runner.os }}-${{ hashFiles('Gemfile.lock') }}
-          restore-keys: |
-            gems-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: bundle install --quiet
+      - uses: ./.github/actions/setup-ruby
 
       - name: Analyse code quality
         run: bundle exec rubycritic --no-browser
