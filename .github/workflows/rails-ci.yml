@@ -1,0 +1,272 @@
+name: Rails CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_call:
+    inputs:
+      ruby-image:
+        required: false
+        type: string
+        # renovate: datasource=docker depName=ghcr.io/captive-studio/ruby-ci
+        default: ghcr.io/captive-studio/ruby-ci:4.0.5@sha256:3bfc455e62bce2e63a9c9df2b2f59d46d6dabc65f5656b9b0ef06c448621f296
+
+      rails-image:
+        required: false
+        type: string
+        # renovate: datasource=docker depName=ghcr.io/captive-studio/rails-ci
+        default: ghcr.io/captive-studio/rails-ci:4.0.5@sha256:8bceb578fd54219c932fba5c4bb3342ab19e1b48e5022156c25bb131b96ffc97
+
+      lint-command:
+        required: false
+        type: string
+        default: rubocop -f github
+
+      audit-command:
+        required: false
+        type: string
+        default: bundler-audit
+
+      brakeman-command:
+        required: false
+        type: string
+        default: brakeman -q
+
+      js-audit-command:
+        required: false
+        type: string
+        default: ""
+
+      test-command:
+        required: false
+        type: string
+        default: bundle exec rspec
+
+      smoke-command:
+        required: false
+        type: string
+        default: ""
+
+      assets-build-command:
+        required: false
+        type: string
+        default: ""
+
+      # postgres et redis tournent en service dans test/system_test pour toutes les apps
+      # (GitHub Actions ne permet pas de service conditionnel par job) ; run-db-setup ne
+      # pilote que l'exécution de db-setup-command, pas le démarrage du service postgres.
+      run-db-setup:
+        required: false
+        type: boolean
+        default: true
+
+      postgres-image:
+        required: false
+        type: string
+        # renovate: datasource=docker depName=postgres
+        default: postgres:18@sha256:22c89fe0d0f507606260237fd55e51f6137f58b2d5bcf6152242b96d9fe8f9a4
+
+      database-url:
+        required: false
+        type: string
+        default: postgresql://postgres:postgres@postgres/postgres
+
+      db-setup-command:
+        required: false
+        type: string
+        default: bin/rails db:create db:schema:load
+
+      redis-image:
+        required: false
+        type: string
+        # renovate: datasource=docker depName=redis
+        default: redis:8@sha256:2838d5524559494f6f1cd66e97e76b200d64a633a8614200620755ed395daf32
+
+      use-system-tests:
+        required: false
+        type: boolean
+        default: false
+
+      system-test-command:
+        required: false
+        type: string
+        default: bundle exec rspec spec/system
+
+jobs:
+  scan_ruby:
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - uses: ./.github/actions/setup-ruby
+
+      - name: Scan for known security vulnerabilities in gems
+        run: ${{ inputs.audit-command }}
+
+      - name: Scan for Rails-specific security vulnerabilities
+        run: ${{ inputs.brakeman-command }}
+
+  lint:
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+      RUBOCOP_CACHE_ROOT: tmp/rubocop
+
+    steps:
+      - uses: ./.github/actions/setup-ruby
+
+      - name: Prepare RuboCop cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        env:
+          DEPENDENCIES_HASH: ${{ hashFiles('.tool-versions', '.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock') }}
+        with:
+          path: ${{ env.RUBOCOP_CACHE_ROOT }}
+          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
+          restore-keys: |
+            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
+
+      - name: Lint code
+        run: ${{ inputs.lint-command }}
+
+  quality:
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - uses: ./.github/actions/setup-ruby
+
+      - name: Analyse code quality
+        run: bundle exec rubycritic --no-browser
+
+  scan_js:
+    if: inputs.js-audit-command != ''
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.ruby-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - uses: ./.github/actions/setup-ruby
+
+      - name: Scan for security vulnerabilities in JavaScript dependencies
+        run: ${{ inputs.js-audit-command }}
+
+  test:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    container:
+      image: ${{ inputs.rails-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+      RAILS_ENV: test
+      DATABASE_URL: ${{ inputs.database-url }}
+
+    services:
+      postgres:
+        image: ${{ inputs.postgres-image }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: ${{ inputs.redis-image }}
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: ./.github/actions/setup-ruby
+
+      - name: Setup Node
+        if: inputs.assets-build-command != ''
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .tool-versions
+          cache: yarn
+
+      - name: Build assets
+        if: inputs.assets-build-command != ''
+        run: ${{ inputs.assets-build-command }}
+
+      - name: Setup database
+        if: inputs.run-db-setup
+        run: ${{ inputs.db-setup-command }}
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+      - name: Smoke test
+        if: inputs.smoke-command != ''
+        run: ${{ inputs.smoke-command }}
+
+  system_test:
+    if: inputs.use-system-tests
+    runs-on: self-hosted
+    timeout-minutes: 20
+    container:
+      image: ${{ inputs.rails-image }}
+    env:
+      BUNDLE_PATH: vendor/bundle
+      RAILS_ENV: test
+      DATABASE_URL: ${{ inputs.database-url }}
+
+    services:
+      postgres:
+        image: ${{ inputs.postgres-image }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: ${{ inputs.redis-image }}
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: ./.github/actions/setup-ruby
+
+      - name: Setup Node
+        if: inputs.assets-build-command != ''
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .tool-versions
+          cache: yarn
+
+      - name: Build assets
+        if: inputs.assets-build-command != ''
+        run: ${{ inputs.assets-build-command }}
+
+      - name: Setup database
+        if: inputs.run-db-setup
+        run: ${{ inputs.db-setup-command }}
+
+      - name: Run system tests
+        run: ${{ inputs.system-test-command }}
