@@ -21,7 +21,7 @@ on:
         required: false
         type: string
         # renovate: datasource=docker depName=ghcr.io/captive-studio/rails-ci
-        default: ghcr.io/captive-studio/rails-ci:4.0.6@sha256:314f685ccc46b7eb92278aacb21df7e233bd5644966afd5dbb96ca817637d7b0
+        default: ghcr.io/captive-studio/rails-ci:4.0.6@sha256:c79dfc2b9882877ebd189cf6952ab028bdfe28ec585093956abb7473fcafd051
 
       lint-command:
         required: false
