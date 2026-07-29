@@ -41,7 +41,10 @@ on:
       quality-command:
         required: false
         type: string
-        default: rubycritic --no-browser
+        # Les chemins sont explicites : sans argument, rubycritic scanne "."
+        # sans aucune exclusion, donc aussi les gems installés dans
+        # vendor/bundle (BUNDLE_PATH), soit des milliers de fichiers inutiles.
+        default: rubycritic --no-browser app lib
 
       js-audit-command:
         required: false
