@@ -58,6 +58,11 @@ on:
         type: boolean
         default: false
 
+      eas-skip-pattern:
+        required: false
+        type: string
+        default: "🔖 Défini la version"
+
       eas-channel:
         required: false
         type: string
@@ -309,7 +314,7 @@ jobs:
         run: ${{ inputs.audit-command }}
 
   eas_update:
-    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && github.event_name == 'push' && !startsWith(github.event.head_commit.message, '🔖 Défini la version')
+    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && github.event_name == 'push' && !startsWith(github.event.head_commit.message, inputs.eas-skip-pattern)
     needs: [build, lint, typecheck, format, health, test, audit]
     runs-on: self-hosted
     timeout-minutes: 20
