@@ -1,0 +1,235 @@
+name: Expo CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_call:
+    secrets:
+      slack-webhook-url:
+        required: false
+
+    inputs:
+      node-image:
+        required: false
+        type: string
+        # renovate: datasource=docker depName=node
+        default: node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
+
+      lint-command:
+        required: false
+        type: string
+        default: npm run lint
+
+      typecheck-command:
+        required: false
+        type: string
+        default: npm run typecheck
+
+      test-command:
+        required: false
+        type: string
+        default: npm run test
+
+      audit-command:
+        required: false
+        type: string
+        default: npx audit-ci --moderate
+
+jobs:
+  build:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+  lint:
+    if: inputs.lint-command != ''
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Lint
+        run: ${{ inputs.lint-command }}
+
+  typecheck:
+    if: inputs.typecheck-command != ''
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Type check
+        run: ${{ inputs.typecheck-command }}
+
+  test:
+    if: inputs.test-command != ''
+    needs: build
+    runs-on: self-hosted
+    timeout-minutes: 20
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Restore Jest cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .jest-cache
+          key: jest-cache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            jest-cache-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+  audit:
+    if: inputs.audit-command != ''
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Audit dependencies
+        run: ${{ inputs.audit-command }}
+
+  notify_failure:
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: [build, lint, typecheck, test, audit]
+    runs-on: captive-small
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
+    steps:
+      - name: Notify Slack on failure
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2162c45d02d # v2.0.0
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "❌ CI failed on `main` — ${{ github.repository }}",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "Workflow", "value": "${{ github.workflow }}", "short": true },
+                    { "title": "Commit", "value": "<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>", "short": true },
+                    { "title": "Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>" }
+                  ]
+                }
+              ]
+            }
