@@ -10,6 +10,12 @@ on:
       slack-webhook-url:
         required: false
 
+      expo-token:
+        required: false
+
+      sentry-auth-token:
+        required: false
+
     inputs:
       node-image:
         required: false
@@ -46,6 +52,26 @@ on:
         required: false
         type: string
         default: npx audit-ci --moderate
+
+      use-eas-update:
+        required: false
+        type: boolean
+        default: false
+
+      eas-channel:
+        required: false
+        type: string
+        default: staging
+
+      eas-environment:
+        required: false
+        type: string
+        default: preview
+
+      expo-public-app-env:
+        required: false
+        type: string
+        default: staging
 
 jobs:
   build:
@@ -282,9 +308,57 @@ jobs:
       - name: Audit dependencies
         run: ${{ inputs.audit-command }}
 
+  eas_update:
+    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && github.event_name == 'push' && !startsWith(github.event.head_commit.message, '🔖 Défini la version')
+    needs: [build, lint, typecheck, format, health, test, audit]
+    runs-on: self-hosted
+    timeout-minutes: 20
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+    env:
+      EXPO_TOKEN: ${{ secrets.expo-token }}
+      EXPO_PUBLIC_APP_ENV: ${{ inputs.expo-public-app-env }}
+      EAS_NO_VCS: 1
+
+    steps:
+      - name: Install system dependencies (Alpine)
+        run: apk add --no-cache tar gzip git
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Install eas-cli
+        run: npm install -g eas-cli
+
+      - name: EAS Update
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: eas update --channel ${{ inputs.eas-channel }} --message "$COMMIT_MESSAGE" --environment ${{ inputs.eas-environment }} --non-interactive
+
+      - name: Upload Sentry sourcemaps
+        if: env.SENTRY_AUTH_TOKEN != ''
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.sentry-auth-token }}
+        run: npx sentry-expo-upload-sourcemaps dist
+
   notify_failure:
     if: failure() && github.ref == 'refs/heads/main'
-    needs: [build, lint, typecheck, format, health, test, audit]
+    needs: [build, lint, typecheck, format, health, test, audit, eas_update]
     runs-on: captive-small
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
