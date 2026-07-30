@@ -61,7 +61,7 @@ on:
       eas-skip-pattern:
         required: false
         type: string
-        default: "🔖 Défini la version"
+        default: "🔖 Définit la version"
 
       eas-channel:
         required: false
