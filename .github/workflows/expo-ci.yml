@@ -48,6 +48,21 @@ on:
         type: string
         default: ""
 
+      jest-cache-path:
+        required: false
+        type: string
+        default: .jest-cache
+
+      install-command:
+        required: false
+        type: string
+        default: npm ci --strict-peer-deps
+
+      extra-cache-paths:
+        required: false
+        type: string
+        default: ""
+
       audit-command:
         required: false
         type: string
@@ -83,8 +98,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -93,14 +108,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
   lint:
     if: inputs.lint-command != ''
@@ -113,8 +130,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -123,14 +140,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
       - name: Lint
         run: ${{ inputs.lint-command }}
@@ -146,8 +165,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -156,14 +175,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
       - name: Type check
         run: ${{ inputs.typecheck-command }}
@@ -179,8 +200,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -189,14 +210,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
       - name: Format check
         run: ${{ inputs.format-check-command }}
@@ -212,8 +235,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -222,14 +245,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
       - name: Health checks
         run: ${{ inputs.health-command }}
@@ -245,8 +270,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -263,7 +288,7 @@ jobs:
       - name: Restore Jest cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
-          path: .jest-cache
+          path: ${{ inputs.jest-cache-path }}
           key: jest-cache-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
             jest-cache-${{ runner.os }}-
@@ -286,8 +311,8 @@ jobs:
         - /home/runner/.npm:/root/.npm
 
     steps:
-      - name: Install tar/gzip (Alpine)
-        run: apk add --no-cache tar gzip
+      - name: Install tar/gzip (Alpine only)
+        run: command -v apk && apk add --no-cache tar gzip || true
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -296,14 +321,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
       - name: Audit dependencies
         run: ${{ inputs.audit-command }}
@@ -333,14 +360,16 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: npm ci --strict-peer-deps
+        run: ${{ inputs.install-command }}
 
       - name: Install eas-cli
         run: npm install -g eas-cli
