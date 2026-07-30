@@ -10,6 +10,9 @@ on:
       rails-master-key:
         required: false
 
+      slack-webhook-url:
+        required: false
+
     inputs:
       ruby-image:
         required: false
@@ -428,3 +431,31 @@ jobs:
 
       - name: Seed database
         run: ${{ inputs.seed-command }}
+
+  notify_failure:
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: [scan_ruby, lint, quality, scan_js, test, system_test, migrate]
+    runs-on: captive-small
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
+    steps:
+      - name: Notify Slack on failure
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@485a9d42d3a73031f12ec201c457e2162c45d02d # v2.0.0
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "❌ CI failed on `main` — ${{ github.repository }}",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "Workflow", "value": "${{ github.workflow }}", "short": true },
+                    { "title": "Commit", "value": "<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>", "short": true },
+                    { "title": "Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>" }
+                  ]
+                }
+              ]
+            }
