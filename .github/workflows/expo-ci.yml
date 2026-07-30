@@ -32,6 +32,16 @@ on:
         type: string
         default: npm run test
 
+      format-check-command:
+        required: false
+        type: string
+        default: npm run format:check
+
+      health-command:
+        required: false
+        type: string
+        default: ""
+
       audit-command:
         required: false
         type: string
@@ -132,6 +142,72 @@ jobs:
       - name: Type check
         run: ${{ inputs.typecheck-command }}
 
+  format:
+    if: inputs.format-check-command != ''
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Format check
+        run: ${{ inputs.format-check-command }}
+
+  health:
+    if: inputs.health-command != ''
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Install tar/gzip (Alpine)
+        run: apk add --no-cache tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Restore npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-deps-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --strict-peer-deps
+
+      - name: Health checks
+        run: ${{ inputs.health-command }}
+
   test:
     if: inputs.test-command != ''
     needs: build
@@ -208,7 +284,7 @@ jobs:
 
   notify_failure:
     if: failure() && github.ref == 'refs/heads/main'
-    needs: [build, lint, typecheck, test, audit]
+    needs: [build, lint, typecheck, format, health, test, audit]
     runs-on: captive-small
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
