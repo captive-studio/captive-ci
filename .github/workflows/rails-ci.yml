@@ -439,8 +439,13 @@ jobs:
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
     steps:
+      - name: Check Slack webhook configuration
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::error::La variable d'environnement SLACK_WEBHOOK_URL n'est pas configuré. Ajoutez-le dans les secrets du dépôt (Settings → Secrets). Exemple : SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz"
+            exit 1
+          fi
       - name: Notify Slack on failure
-        if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           webhook: ${{ env.SLACK_WEBHOOK_URL }}
