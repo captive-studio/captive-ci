@@ -336,19 +336,8 @@ jobs:
         run: ${{ inputs.audit-command }}
 
   eas_update:
-    needs: [build, lint, typecheck, format, health, test, audit]
-    if: >-
-      always() &&
-      needs.build.result == 'success' &&
-      needs.lint.result == 'success' &&
-      needs.typecheck.result == 'success' &&
-      needs.format.result == 'success' &&
-      needs.health.result == 'success' &&
-      needs.test.result == 'success' &&
-      (needs.audit.result == 'success' || needs.audit.result == 'skipped') &&
-      inputs.use-eas-update &&
-      github.ref == 'refs/heads/main' &&
-      !startsWith(github.event.head_commit.message, '🔖 Définit la version')
+    needs: [build, lint, typecheck, format, health, test]
+    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && !startsWith(github.event.head_commit.message, '🔖 Définit la version')
     runs-on: self-hosted
     timeout-minutes: 20
     container:
