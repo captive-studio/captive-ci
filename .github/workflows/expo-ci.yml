@@ -90,6 +90,7 @@ on:
 
 jobs:
   build:
+    if: github.ref_type == 'branch'
     runs-on: self-hosted
     timeout-minutes: 10
     container:
@@ -120,7 +121,7 @@ jobs:
         run: ${{ inputs.install-command }}
 
   lint:
-    if: inputs.lint-command != ''
+    if: github.ref_type == 'branch' && inputs.lint-command != ''
     needs: build
     runs-on: captive-small
     timeout-minutes: 10
@@ -155,7 +156,7 @@ jobs:
         run: ${{ inputs.lint-command }}
 
   typecheck:
-    if: inputs.typecheck-command != ''
+    if: github.ref_type == 'branch' && inputs.typecheck-command != ''
     needs: build
     runs-on: captive-small
     timeout-minutes: 10
@@ -190,7 +191,7 @@ jobs:
         run: ${{ inputs.typecheck-command }}
 
   format:
-    if: inputs.format-check-command != ''
+    if: github.ref_type == 'branch' && inputs.format-check-command != ''
     needs: build
     runs-on: captive-small
     timeout-minutes: 10
@@ -225,7 +226,7 @@ jobs:
         run: ${{ inputs.format-check-command }}
 
   health:
-    if: inputs.health-command != ''
+    if: github.ref_type == 'branch' && inputs.health-command != ''
     needs: build
     runs-on: captive-small
     timeout-minutes: 10
@@ -260,7 +261,7 @@ jobs:
         run: ${{ inputs.health-command }}
 
   test:
-    if: inputs.test-command != ''
+    if: github.ref_type == 'branch' && inputs.test-command != ''
     needs: build
     runs-on: self-hosted
     timeout-minutes: 20
@@ -301,7 +302,7 @@ jobs:
         run: ${{ inputs.test-command }}
 
   audit:
-    if: inputs.audit-command != ''
+    if: github.ref_type == 'branch' && inputs.audit-command != ''
     needs: build
     runs-on: captive-small
     timeout-minutes: 10
