@@ -337,7 +337,7 @@ jobs:
 
   eas_update:
     needs: [build, lint, typecheck, format, health, test]
-    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && !startsWith(github.event.head_commit.message, '🔖 Définit la version')
+    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, '🔖 Définit la version')
     runs-on: self-hosted
     timeout-minutes: 20
     container:
