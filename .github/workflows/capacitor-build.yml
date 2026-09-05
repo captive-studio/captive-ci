@@ -79,7 +79,7 @@ jobs:
     name: Build Android (${{ inputs.profile }})
     runs-on: [self-hosted]
     container:
-      image: ubuntu:24.04
+      image: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
       options: --cpus 2
     env:
       ANDROID_SDK_ROOT: /opt/android-sdk
