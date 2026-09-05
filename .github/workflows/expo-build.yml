@@ -7,28 +7,22 @@ on:
         required: true
         type: string # staging | production
 
-      workflow-file:
-        required: false
-        type: string
-        default: "" # defaults to build-{profile}.yml
-
-      node-image:
-        required: false
-        type: string
-        # renovate: datasource=docker depName=node
-        default: node:24.20.0-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf
-
       install-command:
         required: false
         type: string
         default: npm ci --strict-peer-deps
 
-      extra-cache-paths:
+      build-command:
         required: false
         type: string
-        default: ""
+        default: "" # e.g. "npm run build:staging" — empty skips the web build step
 
-      expo-public-app-env:
+      node-version-file:
+        required: false
+        type: string
+        default: .nvmrc
+
+      slack-webhook-url:
         required: false
         type: string
         default: ""
@@ -41,62 +35,126 @@ on:
         required: false
 
 jobs:
-  eas_build:
-    runs-on: self-hosted
-    timeout-minutes: 30
+  build-android:
+    name: Build Android (${{ inputs.profile }})
+    runs-on: [self-hosted]
     container:
-      image: ${{ inputs.node-image }}
-      volumes:
-        - /home/runner/.npm:/root/.npm
+      image: ubuntu:24.04
+      options: --cpus 2
     env:
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      APP_ENV: ${{ inputs.profile }}
       EXPO_TOKEN: ${{ secrets.expo-token }}
-      EXPO_PUBLIC_APP_ENV: ${{ inputs.expo-public-app-env }}
       EAS_NO_VCS: 1
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - name: Install system dependencies (Alpine)
-        run: apk add --no-cache tar gzip git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install system dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y \
+            ca-certificates unzip curl build-essential \
+            openjdk-21-jdk-headless
+          echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> "$GITHUB_ENV"
 
-      - name: Restore npm dependencies
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+
+      - name: Restore Android SDK cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        id: npm-cache
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}
+          key: android-sdk-36-buildtools-35.0.0-${{ runner.os }}
+
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: platforms;android-36 build-tools;35.0.0 platform-tools
+
+      - name: Restore Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
-            node_modules
-            ${{ inputs.extra-cache-paths }}
-          key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-expo-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-expo-
+
+      - name: Restore npm cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: node_modules
+          key: npm-linux-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-linux-
 
       - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
         run: ${{ inputs.install-command }}
 
-      - name: Install eas-cli
-        run: npm install -g eas-cli
+      - name: Build web app
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+        env:
+          NODE_ENV: production
 
-      - name: EAS Build
-        run: |
-          WORKFLOW_FILE="${{ inputs.workflow-file }}"
-          if [ -z "$WORKFLOW_FILE" ]; then
-            WORKFLOW_FILE="build-${{ inputs.profile }}.yml"
-          fi
-          eas workflow:run "$WORKFLOW_FILE" --non-interactive
+      - name: EAS Build (local, Android)
+        run: npx eas-cli build --platform android --profile ${{ inputs.profile }} --local --non-interactive --output "$RUNNER_TEMP/app.aab"
 
-  notify_failure:
+      - name: EAS Submit (Android)
+        run: npx eas-cli submit --platform android --profile ${{ inputs.profile }} --path "$RUNNER_TEMP/app.aab" --non-interactive
+
+  build-ios:
+    name: Build iOS (${{ inputs.profile }})
+    runs-on: macos-26
+    env:
+      APP_ENV: ${{ inputs.profile }}
+      EXPO_TOKEN: ${{ secrets.expo-token }}
+      EAS_NO_VCS: 1
+    concurrency:
+      group: expo-build-ios-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+
+      - name: Restore npm cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: node_modules
+          key: npm-macos-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-macos-
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Build web app
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+        env:
+          NODE_ENV: production
+
+      - name: EAS Build (local, iOS)
+        run: npx eas-cli build --platform ios --profile ${{ inputs.profile }} --local --non-interactive --output "$RUNNER_TEMP/app.ipa"
+
+      - name: EAS Submit (iOS)
+        run: npx eas-cli submit --platform ios --profile ${{ inputs.profile }} --path "$RUNNER_TEMP/app.ipa" --non-interactive
+
+  notify-failure:
     if: failure()
-    needs: [eas_build]
+    needs: [build-android, build-ios]
     runs-on: captive-small
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
     steps:
-      - name: Check Slack webhook configuration
-        if: env.SLACK_WEBHOOK_URL != ''
-        run: echo "Slack webhook configured"
-
       - name: Notify Slack on failure
         if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
@@ -105,13 +163,12 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
-              "text": "❌ EAS Build failed (`${{ inputs.profile }}`) — ${{ github.repository }}",
+              "text": "❌ Expo Build failed (`${{ inputs.profile }}`) — ${{ github.repository }}",
               "attachments": [
                 {
                   "color": "danger",
                   "fields": [
                     { "title": "Profile", "value": "${{ inputs.profile }}", "short": true },
-                    { "title": "Workflow", "value": "${{ inputs.workflow-file || format('build-{0}.yml', inputs.profile) }}", "short": true },
                     { "title": "Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>" }
                   ]
                 }
