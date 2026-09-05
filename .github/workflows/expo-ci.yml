@@ -88,6 +88,11 @@ on:
         type: string
         default: staging
 
+      eas-update-commit-prefix:
+        required: false
+        type: string
+        default: "🔖 Set version"
+
 jobs:
   build:
     if: github.ref_type == 'branch'
@@ -338,7 +343,7 @@ jobs:
 
   eas_update:
     needs: [build, lint, typecheck, format, health, test]
-    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, '🔖 Définit la version')
+    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, inputs.eas-update-commit-prefix)
     runs-on: self-hosted
     timeout-minutes: 20
     container:
