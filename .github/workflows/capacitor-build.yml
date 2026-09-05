@@ -1,0 +1,274 @@
+name: Capacitor Build
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        required: true
+        type: string # staging | production
+
+      install-command:
+        required: false
+        type: string
+        default: yarn install --immutable
+
+      build-command:
+        required: false
+        type: string
+        default: "" # e.g. "yarn build:staging" — empty skips the web build step
+
+      android-lane:
+        required: false
+        type: string
+        default: android beta_android # fastlane platform lane
+
+      ios-lane:
+        required: false
+        type: string
+        default: ios beta_ios # fastlane platform lane
+
+      ruby-version:
+        required: false
+        type: string
+        default: "3.3"
+
+      node-version-file:
+        required: false
+        type: string
+        default: .nvmrc
+
+      slack-webhook-url:
+        required: false
+        type: string
+        default: ""
+
+    secrets:
+      # Android
+      android-keystore-base64:
+        required: false
+      android-keystore-password:
+        required: false
+      android-key-alias:
+        required: false
+      android-key-password:
+        required: false
+      google-play-json-key:
+        required: false
+
+      # iOS
+      app-store-connect-api-key-id:
+        required: false
+      app-store-connect-api-issuer-id:
+        required: false
+      app-store-connect-api-key-content:
+        required: false
+      ios-certificate-p12-base64:
+        required: false
+      ios-certificate-password:
+        required: false
+      ios-provisioning-profile-base64:
+        required: false
+      ios-provisioning-profile-name:
+        required: false
+
+      slack-webhook-url:
+        required: false
+
+jobs:
+  build-android:
+    name: Build Android (${{ inputs.profile }})
+    runs-on: [self-hosted]
+    container:
+      image: ubuntu:24.04
+      options: --cpus 2
+    env:
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      APP_ENV: ${{ inputs.profile }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install system dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y \
+            ca-certificates unzip curl build-essential \
+            openjdk-21-jdk-headless libyaml-0-2
+          echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+
+      - name: Enable corepack (yarn)
+        run: corepack enable
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+
+      - name: Restore Android SDK cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}
+          key: android-sdk-36-buildtools-35.0.0-${{ runner.os }}
+
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: platforms;android-36 build-tools;35.0.0 platform-tools
+
+      - name: Restore Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-android-
+
+      - name: Restore yarn cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            node_modules
+            .yarn/cache
+            .yarn/unplugged
+          key: yarn-bookworm-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: yarn-bookworm-
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Build web app
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+        env:
+          NODE_ENV: production
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Decode Android secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.android-keystore-base64 }}
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.google-play-json-key }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/android-upload-keystore.jks"
+          printf '%s' "$GOOGLE_PLAY_JSON_KEY" > "$RUNNER_TEMP/google-play-json-key.json"
+          test -s "$RUNNER_TEMP/android-upload-keystore.jks"
+          test -s "$RUNNER_TEMP/google-play-json-key.json"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-upload-keystore.jks" >> "$GITHUB_ENV"
+          echo "GOOGLE_PLAY_JSON_KEY_PATH=$RUNNER_TEMP/google-play-json-key.json" >> "$GITHUB_ENV"
+
+      - name: Fastlane (${{ inputs.android-lane }})
+        run: bundle exec fastlane ${{ inputs.android-lane }}
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.android-keystore-password }}
+          ANDROID_KEY_ALIAS: ${{ secrets.android-key-alias }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.android-key-password }}
+
+  build-ios:
+    name: Build iOS (${{ inputs.profile }})
+    runs-on: macos-26
+    env:
+      APP_ENV: ${{ inputs.profile }}
+    concurrency:
+      group: capacitor-build-ios-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: ${{ inputs.ruby-version }}
+          bundler-cache: true
+
+      - name: Restore yarn cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            node_modules
+            .yarn/cache
+            .yarn/unplugged
+          key: yarn-macos-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: yarn-macos-
+
+      - name: Restore CocoaPods cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ios/App/Pods
+          key: cocoapods-${{ hashFiles('ios/App/Podfile.lock') }}
+          restore-keys: cocoapods-
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Build web app
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+        env:
+          NODE_ENV: production
+
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      - name: Decode iOS secrets
+        env:
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.ios-certificate-p12-base64 }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.ios-provisioning-profile-base64 }}
+        run: |
+          printf '%s' "$IOS_CERTIFICATE_P12_BASE64" | base64 -d > "$RUNNER_TEMP/ios_certificate.p12"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/App_AppStore.mobileprovision"
+          test -s "$RUNNER_TEMP/ios_certificate.p12"
+          test -s "$RUNNER_TEMP/App_AppStore.mobileprovision"
+          echo "IOS_CERTIFICATE_P12_PATH=$RUNNER_TEMP/ios_certificate.p12" >> "$GITHUB_ENV"
+          echo "IOS_PROVISIONING_PROFILE_PATH=$RUNNER_TEMP/App_AppStore.mobileprovision" >> "$GITHUB_ENV"
+
+      - name: Fastlane (${{ inputs.ios-lane }})
+        run: bundle exec fastlane ${{ inputs.ios-lane }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.app-store-connect-api-key-id }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.app-store-connect-api-issuer-id }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.app-store-connect-api-key-content }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.ios-certificate-password }}
+          IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.ios-provisioning-profile-name }}
+
+  notify-failure:
+    if: failure()
+    needs: [build-android, build-ios]
+    runs-on: captive-small
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
+    steps:
+      - name: Notify Slack on failure
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "❌ Capacitor Build failed (`${{ inputs.profile }}`) — ${{ github.repository }}",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "Profile", "value": "${{ inputs.profile }}", "short": true },
+                    { "title": "Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>" }
+                  ]
+                }
+              ]
+            }
