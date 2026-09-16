@@ -131,11 +131,14 @@ jobs:
         if: steps.npm-cache.outputs.cache-hit != 'true'
         run: ${{ inputs.install-command }}
 
-  lint:
-    if: github.ref_type == 'branch' && inputs.lint-command != ''
+  source_checks:
+    name: Source checks
+    if: >-
+      github.ref_type == 'branch' &&
+      (inputs.lint-command != '' || inputs.typecheck-command != '' || inputs.format-check-command != '' || inputs.health-command != '' || inputs.audit-command != '')
     needs: build
     runs-on: captive-small
-    timeout-minutes: 10
+    timeout-minutes: 55
     container:
       image: ${{ inputs.node-image }}
       volumes:
@@ -155,101 +158,46 @@ jobs:
           key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
+        id: install
         if: steps.npm-cache.outputs.cache-hit != 'true'
         run: ${{ inputs.install-command }}
 
+      # Chaque contrôle activé continue après l’échec d’un autre contrôle.
+      # Une préparation ratée ou une annulation empêche leur exécution.
       - name: Lint
+        if: >-
+          !cancelled() && inputs.lint-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
         run: ${{ inputs.lint-command }}
 
-  typecheck:
-    if: github.ref_type == 'branch' && inputs.typecheck-command != ''
-    needs: build
-    runs-on: captive-small
-    timeout-minutes: 10
-    container:
-      image: ${{ inputs.node-image }}
-      volumes:
-        - /home/runner/.npm:/root/.npm
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Restore npm dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        id: npm-cache
-        with:
-          path: |
-            node_modules
-            ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: ${{ inputs.install-command }}
-
       - name: Type check
+        if: >-
+          !cancelled() && inputs.typecheck-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
         run: ${{ inputs.typecheck-command }}
 
-  format:
-    if: github.ref_type == 'branch' && inputs.format-check-command != ''
-    needs: build
-    runs-on: captive-small
-    timeout-minutes: 10
-    container:
-      image: ${{ inputs.node-image }}
-      volumes:
-        - /home/runner/.npm:/root/.npm
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Restore npm dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        id: npm-cache
-        with:
-          path: |
-            node_modules
-            ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: ${{ inputs.install-command }}
-
       - name: Format check
+        if: >-
+          !cancelled() && inputs.format-check-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
         run: ${{ inputs.format-check-command }}
 
-  health:
-    if: github.ref_type == 'branch' && inputs.health-command != ''
-    needs: build
-    runs-on: captive-small
-    timeout-minutes: 10
-    container:
-      image: ${{ inputs.node-image }}
-      volumes:
-        - /home/runner/.npm:/root/.npm
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Restore npm dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        id: npm-cache
-        with:
-          path: |
-            node_modules
-            ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: ${{ inputs.install-command }}
-
       - name: Health checks
+        if: >-
+          !cancelled() && inputs.health-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
         run: ${{ inputs.health-command }}
+
+      - name: Audit dependencies
+        if: >-
+          !cancelled() && inputs.audit-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
+        run: ${{ inputs.audit-command }}
 
   test:
     if: github.ref_type == 'branch' && inputs.test-command != ''
@@ -290,39 +238,14 @@ jobs:
       - name: Run tests
         run: ${{ inputs.test-command }}
 
-  audit:
-    if: github.ref_type == 'branch' && inputs.audit-command != ''
-    needs: build
-    runs-on: captive-small
-    timeout-minutes: 10
-    container:
-      image: ${{ inputs.node-image }}
-      volumes:
-        - /home/runner/.npm:/root/.npm
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Restore npm dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        id: npm-cache
-        with:
-          path: |
-            node_modules
-            ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: ${{ inputs.install-command }}
-
-      - name: Audit dependencies
-        run: ${{ inputs.audit-command }}
-
   eas_update:
-    needs: [build, lint, typecheck, format, health, test]
-    if: inputs.use-eas-update && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, inputs.eas-update-commit-prefix)
+    needs: [build, source_checks, test]
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      (needs.source_checks.result == 'success' || needs.source_checks.result == 'skipped') &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      inputs.use-eas-update && github.ref == 'refs/heads/main' &&
+      startsWith(github.event.head_commit.message, inputs.eas-update-commit-prefix)
     runs-on: self-hosted
     timeout-minutes: 20
     container:
@@ -367,7 +290,7 @@ jobs:
 
   notify_failure:
     if: failure() && github.ref == 'refs/heads/main'
-    needs: [build, lint, typecheck, format, health, test, audit, eas_update]
+    needs: [build, source_checks, test, eas_update]
     runs-on: captive-small
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
