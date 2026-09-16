@@ -117,11 +117,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      # Seul producteur du cache npm : les jobs suivants utilisent `cache/restore`, qui ne
-      # ré-enregistre rien. Sans ça, un simple rattrapage par restore-keys fait rater la clé
-      # exacte aux six jobs en éventail, qui relancent tous `npm ci` puis tentent tous
-      # d'écrire le même node_modules multi-gigaoctet. C'est le disque des nœuds runner qui
-      # paie, et c'est justement lui qui borne aujourd'hui la concurrence CI.
+      # Un seul producteur ; les consommateurs restaurent sans republier le cache.
+      # Clé exacte uniquement : npm ci efface node_modules avant installation,
+      # donc restaurer une archive d'un autre lockfile coûte du temps pour rien.
       - name: Save npm dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
@@ -130,8 +128,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -162,8 +158,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -197,8 +191,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -232,8 +224,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -267,8 +257,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -303,8 +291,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Restore Jest cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -346,8 +332,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -385,8 +369,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'

@@ -60,6 +60,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # Pas de repli vers un autre lockfile : npm ci effacerait cette restauration.
       - name: Restore npm dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
@@ -68,8 +69,6 @@ jobs:
             node_modules
             ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-deps-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
