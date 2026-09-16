@@ -96,7 +96,14 @@ on:
 jobs:
   build:
     if: github.ref_type == 'branch'
-    runs-on: self-hosted
+    # captive-small et non self-hosted : ce job fait un checkout et un `npm ci`, il ne
+    # construit aucune image et n'appelle jamais le daemon Docker partagé. Le pool
+    # `self-hosted` est la ressource rare du cluster (maxRunners 14, contre 22 pour
+    # captive-small, plafond cumulé volontairement borné par l'espace disque de r8x) :
+    # le réserver aux jobs qui buildent des images. Les limites CPU/mémoire du pod runner
+    # ne bornent pas le job, qui s'exécute dans un conteneur enfant du dind du nœud ; ce
+    # sont des jetons de quota d'ordonnancement, pas un budget d'exécution.
+    runs-on: captive-small
     timeout-minutes: 10
     container:
       image: ${{ inputs.node-image }}
@@ -110,7 +117,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Restore npm dependencies
+      # Seul producteur du cache npm : les jobs suivants utilisent `cache/restore`, qui ne
+      # ré-enregistre rien. Sans ça, un simple rattrapage par restore-keys fait rater la clé
+      # exacte aux six jobs en éventail, qui relancent tous `npm ci` puis tentent tous
+      # d'écrire le même node_modules multi-gigaoctet. C'est le disque des nœuds runner qui
+      # paie, et c'est justement lui qui borne aujourd'hui la concurrence CI.
+      - name: Save npm dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
@@ -143,7 +155,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
           path: |
@@ -178,7 +190,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
           path: |
@@ -213,7 +225,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
           path: |
@@ -248,7 +260,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
           path: |
@@ -268,7 +280,8 @@ jobs:
   test:
     if: github.ref_type == 'branch' && inputs.test-command != ''
     needs: build
-    runs-on: self-hosted
+    # Jest ne touche pas au daemon Docker : même raison que le job build ci-dessus.
+    runs-on: captive-small
     timeout-minutes: 20
     container:
       image: ${{ inputs.node-image }}
@@ -283,10 +296,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ${{ inputs.extra-cache-paths }}
           key: npm-deps-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-deps-${{ runner.os }}-
@@ -324,7 +339,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
           path: |
@@ -363,7 +378,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Restore npm dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         id: npm-cache
         with:
           path: |
