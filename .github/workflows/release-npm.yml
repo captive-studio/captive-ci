@@ -15,6 +15,10 @@ on:
         description: "npm registry URL"
         type: string
         default: "https://registry.npmjs.org"
+      package-manager:
+        description: "Package manager used by the repository: 'npm' (default) or 'pnpm'."
+        type: string
+        default: "npm"
     secrets:
       NPM_TOKEN:
         description: "npm auth token with publish access"
@@ -27,6 +31,8 @@ jobs:
   release-npm:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PM: ${{ inputs.package-manager }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -35,8 +41,19 @@ jobs:
           node-version: ${{ inputs.node-version }}
           registry-url: ${{ inputs.registry-url }}
 
+      # corepack lit le champ packageManager du dépôt : la version de pnpm vient de là,
+      # jamais d'ici, pour qu'un dépôt ne publie pas avec une autre que celle de sa CI.
+      - name: Enable corepack
+        if: inputs.package-manager == 'pnpm'
+        run: corepack enable
+
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          if [ "$PM" = "pnpm" ]; then
+            pnpm install --frozen-lockfile
+          else
+            npm ci --no-audit --no-fund
+          fi
 
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
@@ -49,13 +66,23 @@ jobs:
 
       - name: Build package
         if: inputs.packages-dir == ''
-        run: npm run build --if-present
+        run: |
+          if [ "$PM" = "pnpm" ]; then
+            pnpm run build --if-present
+          else
+            npm run build --if-present
+          fi
 
       - name: Publish package to npm
         if: inputs.packages-dir == ''
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: |
+          if [ "$PM" = "pnpm" ]; then
+            pnpm publish --access public --no-git-checks
+          else
+            npm publish --access public
+          fi
 
       - name: Resolve workspace package order
         if: inputs.packages-dir != ''
@@ -143,7 +170,11 @@ jobs:
           while IFS= read -r name; do
             [[ -z "$name" ]] && continue
             echo "  Build $name..."
-            npm -w "$name" run build --if-present
+            if [ "$PM" = "pnpm" ]; then
+              pnpm --filter "$name" run build --if-present
+            else
+              npm -w "$name" run build --if-present
+            fi
           done < /tmp/release-npm-packages.txt
 
       - name: Publish packages to npm (ordre topologique)
@@ -154,5 +185,11 @@ jobs:
           while IFS= read -r name; do
             [[ -z "$name" ]] && continue
             echo "  Publish $name..."
-            npm -w "$name" publish --access public
+            if [ "$PM" = "pnpm" ]; then
+              # --no-git-checks : la publication part d'un tag, donc d'un HEAD detache que
+              # pnpm refuserait sinon. npm ne fait pas ce controle.
+              pnpm --filter "$name" publish --access public --no-git-checks
+            else
+              npm -w "$name" publish --access public
+            fi
           done < /tmp/release-npm-packages.txt
