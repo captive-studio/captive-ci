@@ -28,9 +28,10 @@ on:
         default: ios beta_ios # fastlane platform lane
 
       ruby-version:
+        description: "Ruby version to use (par défaut, lue depuis .ruby-version/.tool-versions du projet)"
         required: false
         type: string
-        default: "3.3"
+        default: "default"
 
       node-version-file:
         required: false

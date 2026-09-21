@@ -4,9 +4,9 @@ on:
   workflow_call:
     inputs:
       ruby-version:
-        description: "Ruby version to use"
+        description: "Ruby version to use (par défaut, lue depuis .ruby-version/.tool-versions du projet)"
         type: string
-        default: "3.4"
+        default: "default"
       homebrew-tap:
         description: "Homebrew tap to update (e.g. captive-studio/tap), optional"
         type: string
