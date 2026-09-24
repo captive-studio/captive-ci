@@ -17,6 +17,12 @@ on:
         required: false
 
     inputs:
+      working-directory:
+        description: "Dossier du projet Expo dans le dépôt (package.json, package-lock.json), pour un monorepo où l'app n'est pas à la racine."
+        required: false
+        type: string
+        default: "."
+
       node-image:
         description: "Image CI prééquipée avec Node, npm, Git, tar, gzip et zstd."
         required: false
@@ -111,6 +117,9 @@ jobs:
       volumes:
         - /home/runner/.npm:/root/.npm
 
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -123,9 +132,9 @@ jobs:
         id: npm-cache
         with:
           path: |
-            node_modules
+            ${{ inputs.working-directory }}/node_modules
             ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
@@ -144,6 +153,9 @@ jobs:
       volumes:
         - /home/runner/.npm:/root/.npm
 
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -153,9 +165,9 @@ jobs:
         id: npm-cache
         with:
           path: |
-            node_modules
+            ${{ inputs.working-directory }}/node_modules
             ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
 
       - name: Install dependencies
         id: install
@@ -210,6 +222,9 @@ jobs:
       volumes:
         - /home/runner/.npm:/root/.npm
 
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -219,14 +234,14 @@ jobs:
         id: npm-cache
         with:
           path: |
-            node_modules
+            ${{ inputs.working-directory }}/node_modules
             ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
 
       - name: Restore Jest cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
-          path: ${{ inputs.jest-cache-path }}
+          path: ${{ inputs.working-directory }}/${{ inputs.jest-cache-path }}
           key: jest-cache-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
             jest-cache-${{ runner.os }}-
@@ -257,6 +272,9 @@ jobs:
       EXPO_PUBLIC_APP_ENV: ${{ inputs.expo-public-app-env }}
       EAS_NO_VCS: 1
 
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -266,9 +284,9 @@ jobs:
         id: npm-cache
         with:
           path: |
-            node_modules
+            ${{ inputs.working-directory }}/node_modules
             ${{ inputs.extra-cache-paths }}
-          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
 
       - name: Install dependencies
         if: steps.npm-cache.outputs.cache-hit != 'true'
