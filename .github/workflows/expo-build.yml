@@ -52,7 +52,6 @@ jobs:
     env:
       EXPO_TOKEN: ${{ secrets.expo-token }}
       EXPO_PUBLIC_APP_ENV: ${{ inputs.expo-public-app-env }}
-      EAS_NO_VCS: 1
 
     steps:
       - name: Checkout code
@@ -75,8 +74,13 @@ jobs:
       - name: Install eas-cli
         run: npm install -g eas-cli
 
+      # Les builds EAS exigent un dépôt git : sans `.git` dans l'archive envoyée,
+      # `eas build:internal` échoue. actions/checkout ne déclare le dépôt « safe »
+      # que le temps du checkout, d'où le safe.directory (propriétaire différent
+      # dans le conteneur).
       - name: EAS Build
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           WORKFLOW_FILE="${{ inputs.workflow-file }}"
           if [ -z "$WORKFLOW_FILE" ]; then
             WORKFLOW_FILE="build-${{ inputs.profile }}.yml"
