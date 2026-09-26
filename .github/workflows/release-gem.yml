@@ -15,6 +15,14 @@ on:
         description: "Formula name in the tap, optional"
         type: string
         default: ""
+      homebrew-version-json:
+        description: "Fichier JSON du tap dont la clé latest reçoit la version publiée (ex. version.json), optionnel. La clé minimum reste maintenue à la main."
+        type: string
+        default: ""
+      working-directory:
+        description: "Dossier du gem dans le dépôt (gemspec, Gemfile, .tool-versions), pour un monorepo où le gem n'est pas à la racine."
+        type: string
+        default: "."
     secrets:
       RUBYGEMS_API_KEY:
         description: "RubyGems API key with push access"
@@ -31,6 +39,9 @@ jobs:
   release-gem:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -38,6 +49,7 @@ jobs:
         with:
           ruby-version: ${{ inputs.ruby-version }}
           bundler-cache: true
+          working-directory: ${{ inputs.working-directory }}
 
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
@@ -75,7 +87,8 @@ jobs:
           VERSION_NUM="${VERSION#v}"
           GEM_NAME=$(basename ${{ inputs.homebrew-formula }})
           URL="https://rubygems.org/gems/${GEM_NAME}-${VERSION_NUM}.gem"
-          SHA256=$(curl -sL "$URL" | shasum -a 256 | cut -d' ' -f1)
+          curl -fsSL --retry 5 --retry-all-errors "$URL" -o released.gem
+          SHA256=$(shasum -a 256 released.gem | cut -d' ' -f1)
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/captive-studio/homebrew-${{ inputs.homebrew-tap }}.git" tap-repo
           cd tap-repo
@@ -84,5 +97,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/${{ inputs.homebrew-formula }}.rb
+          if [ -n "${{ inputs.homebrew-version-json }}" ]; then
+            jq --arg v "$VERSION_NUM" '.latest = $v' "${{ inputs.homebrew-version-json }}" > version.json.tmp
+            mv version.json.tmp "${{ inputs.homebrew-version-json }}"
+            git add "${{ inputs.homebrew-version-json }}"
+          fi
           git commit -m "🔖 Met à jour ${{ inputs.homebrew-formula }} ${VERSION}"
           git push
