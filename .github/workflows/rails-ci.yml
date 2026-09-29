@@ -18,7 +18,7 @@ on:
         required: false
         type: string
         # renovate: datasource=docker depName=ghcr.io/captive-studio/ruby-ci
-        default: ghcr.io/captive-studio/ruby-ci:4.0.7@sha256:de9be0045077d11297bc5089cd79bba3546c708ef6d602a4c0bf96c84dce208a
+        default: ghcr.io/captive-studio/ruby-ci:4.0.7@sha256:ebe5d8699a6a80442acaa04680c9d4e3b712e89cdb6b72e9a6b7d07e206e6e38
 
       rails-image:
         required: false
