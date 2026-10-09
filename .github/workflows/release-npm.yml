@@ -85,7 +85,7 @@ jobs:
         if: inputs.packages-dir == ''
         run: |
           if [ "$PM" = "pnpm" ]; then
-            pnpm run build --if-present
+            pnpm run --if-present build
           else
             npm run build --if-present
           fi
@@ -188,7 +188,7 @@ jobs:
             [[ -z "$name" ]] && continue
             echo "  Build $name..."
             if [ "$PM" = "pnpm" ]; then
-              pnpm --filter "$name" run build --if-present
+              pnpm --filter "$name" run --if-present build
             else
               npm -w "$name" run build --if-present
             fi
