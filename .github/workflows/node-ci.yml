@@ -1,0 +1,206 @@
+name: Node CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    secrets:
+      slack-webhook-url:
+        required: false
+
+    inputs:
+      node-image:
+        description: "Image CI prééquipée avec Node, npm, Git, tar, gzip et zstd."
+        required: false
+        type: string
+        # renovate: datasource=docker depName=ghcr.io/captive-studio/node-ci
+        default: ghcr.io/captive-studio/node-ci:24.21.0@sha256:109345c2c11edde13ef31d909c66991c21a5bc3c54728eeedea60fd0a4579d73
+
+      install-command:
+        required: false
+        type: string
+        default: npm ci
+
+      lint-command:
+        required: false
+        type: string
+        default: npm run lint
+
+      typecheck-command:
+        required: false
+        type: string
+        default: npm run typecheck
+
+      format-check-command:
+        required: false
+        type: string
+        default: npm run format:check
+
+      audit-command:
+        required: false
+        type: string
+        default: npx audit-ci --moderate
+
+      test-command:
+        required: false
+        type: string
+        default: npm run test
+
+jobs:
+  build:
+    if: github.ref_type == 'branch'
+    # captive-small et non self-hosted : checkout + npm ci, aucune image construite.
+    # Voir expo-ci.yml pour le détail du choix de pool.
+    runs-on: captive-small
+    timeout-minutes: 10
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Un seul producteur ; les consommateurs restaurent sans republier le cache.
+      - name: Save npm dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: ${{ inputs.install-command }}
+
+  source_checks:
+    name: Source checks
+    if: >-
+      github.ref_type == 'branch' &&
+      (inputs.lint-command != '' || inputs.typecheck-command != '' || inputs.format-check-command != '' || inputs.audit-command != '')
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 30
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Restore npm dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        id: install
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: ${{ inputs.install-command }}
+
+      # Chaque contrôle activé continue après l’échec d’un autre contrôle.
+      # Une préparation ratée ou une annulation empêche leur exécution.
+      - name: Lint
+        if: >-
+          !cancelled() && inputs.lint-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
+        run: ${{ inputs.lint-command }}
+
+      - name: Type check
+        if: >-
+          !cancelled() && inputs.typecheck-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
+        run: ${{ inputs.typecheck-command }}
+
+      - name: Format check
+        if: >-
+          !cancelled() && inputs.format-check-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
+        run: ${{ inputs.format-check-command }}
+
+      - name: Audit dependencies
+        if: >-
+          !cancelled() && inputs.audit-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
+        run: ${{ inputs.audit-command }}
+
+  test:
+    if: github.ref_type == 'branch' && inputs.test-command != ''
+    needs: build
+    runs-on: captive-small
+    timeout-minutes: 20
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Restore npm dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: npm-cache
+        with:
+          path: node_modules
+          key: npm-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-image }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: ${{ inputs.install-command }}
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+  notify_failure:
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: [build, source_checks, test]
+    runs-on: captive-small
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
+    steps:
+      - name: Check Slack webhook configuration
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::error::La variable d'environnement SLACK_WEBHOOK_URL n'est pas configurée. Ajoutez-la dans les secrets du dépôt (Settings → Secrets)."
+            exit 1
+          fi
+      - name: Notify Slack on failure
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
+        with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "❌ CI failed on `main` - ${{ github.repository }}",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "Workflow", "value": "${{ github.workflow }}", "short": true },
+                    { "title": "Commit", "value": "<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>", "short": true },
+                    { "title": "Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>" }
+                  ]
+                }
+              ]
+            }
