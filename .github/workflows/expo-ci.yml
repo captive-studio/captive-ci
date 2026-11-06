@@ -55,6 +55,12 @@ on:
         type: string
         default: ""
 
+      quality-command:
+        description: "Lance code-multivitals et écrit son rapport JSON dans code-multivitals.json (dossier de travail). Le seuil est minimumHealthScore dans .code-multivitals.json. Vide : pas d'analyse."
+        required: false
+        type: string
+        default: ""
+
       jest-cache-path:
         required: false
         type: string
@@ -144,7 +150,7 @@ jobs:
     name: Source checks
     if: >-
       github.ref_type == 'branch' &&
-      (inputs.lint-command != '' || inputs.typecheck-command != '' || inputs.format-check-command != '' || inputs.health-command != '' || inputs.audit-command != '')
+      (inputs.lint-command != '' || inputs.typecheck-command != '' || inputs.format-check-command != '' || inputs.health-command != '' || inputs.quality-command != '' || inputs.audit-command != '')
     needs: build
     runs-on: captive-small
     timeout-minutes: 55
@@ -203,6 +209,53 @@ jobs:
           (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
         timeout-minutes: 10
         run: ${{ inputs.health-command }}
+
+      # code-multivitals n'a pas de score minimum et sort en 1 dès qu'une fonction dépasse un
+      # seuil : on ignore son code de sortie et on compare le Health Score moyen de son rapport
+      # au minimumHealthScore du dépôt, comme rubycritic avec minimum_score (ADR 0002).
+      - name: Code quality
+        if: >-
+          !cancelled() && inputs.quality-command != '' &&
+          (steps.npm-cache.outputs.cache-hit == 'true' || steps.install.outcome == 'success')
+        timeout-minutes: 10
+        env:
+          QUALITY_COMMAND: ${{ inputs.quality-command }}
+        run: |
+          if [ ! -f .code-multivitals.json ]; then
+            echo "::error::Aucun .code-multivitals.json : sans minimumHealthScore, le score n'est comparé à rien. Créez le fichier dans le dossier du projet avec au moins { \"minimumHealthScore\": <score actuel> }."
+            exit 1
+          fi
+          MINIMUM=$(node -p 'const m = require("./.code-multivitals.json").minimumHealthScore; typeof m === "number" ? m : ""')
+          if [ -z "$MINIMUM" ]; then
+            echo "::error::.code-multivitals.json ne déclare pas un minimumHealthScore numérique. Ajoutez par exemple « \"minimumHealthScore\": 74 »."
+            exit 1
+          fi
+
+          rm -f code-multivitals.json
+          sh -c "$QUALITY_COMMAND" || true
+          # Sans rapport, un outil planté passerait pour du code sain.
+          if [ ! -s code-multivitals.json ]; then
+            echo "::error::quality-command n'a pas écrit code-multivitals.json. Elle doit lancer code-multivitals avec « -r json -o code-multivitals.json »."
+            exit 1
+          fi
+
+          node -e '
+            const path = require("path");
+            const report = require("./code-multivitals.json");
+            const minimum = Number(process.argv[1]);
+            const score = report.averageHealthScore;
+            const weakest = report.files
+              .flatMap((file) => file.functions.map((fn) => ({ ...fn, file: path.relative(process.cwd(), file.filePath) })))
+              .sort((a, b) => a.healthScore - b.healthScore)
+              .slice(0, 10);
+            console.log(`Health Score moyen : ${score} (minimum : ${minimum}), ${report.totalFiles} fichiers.`);
+            console.log("Fonctions les plus faibles :");
+            for (const fn of weakest) console.log(`  ${fn.healthScore}  ${fn.file}:${fn.startLine}  ${fn.name}`);
+            if (!(score >= minimum)) {
+              console.log(`::error::Health Score moyen ${score} sous le minimum ${minimum} de .code-multivitals.json.`);
+              process.exit(1);
+            }
+          ' "$MINIMUM"
 
       - name: Audit dependencies
         if: >-
