@@ -19,13 +19,14 @@ on:
         description: "Package manager used by the repository: 'npm' (default) or 'pnpm'."
         type: string
         default: "npm"
-    secrets:
-      NPM_TOKEN:
-        description: "npm auth token with publish access"
-        required: true
 
+# Trusted publishing (OIDC) : npm délivre un jeton éphémère à chaque publication, aucun
+# NPM_TOKEN à stocker ni à renouveler. Chaque paquet déclare ce dépôt et le workflow
+# appelant sur npmjs.com, et son package.json porte un repository.url identique au dépôt.
+# Exige un runner hébergé par GitHub et npm >= 11.5.1 (Node 24) ou pnpm récent.
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release-npm:
@@ -76,11 +77,6 @@ jobs:
         with:
           generate_release_notes: true
 
-      - name: Check npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm whoami
-
       - name: Build package
         if: inputs.packages-dir == ''
         run: |
@@ -92,8 +88,6 @@ jobs:
 
       - name: Publish package to npm
         if: inputs.packages-dir == ''
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "$PM" = "pnpm" ]; then
             pnpm publish --access public --no-git-checks
@@ -196,8 +190,6 @@ jobs:
 
       - name: Publish packages to npm (ordre topologique)
         if: inputs.packages-dir != ''
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           while IFS= read -r name; do
             [[ -z "$name" ]] && continue
