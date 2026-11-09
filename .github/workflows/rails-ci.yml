@@ -276,6 +276,13 @@ jobs:
       - name: Install dependencies
         run: bundle install --quiet
 
+      # L'image ruby-ci n'embarque pas Node : sans lui, un js-audit-command
+      # basé sur npm/yarn (npm audit, yarn audit) échoue faute de binaire.
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+
       - name: Scan for security vulnerabilities in JavaScript dependencies
         run: ${{ inputs.js-audit-command }}
 
