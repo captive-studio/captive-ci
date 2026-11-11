@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   release-npm:
-    runs-on: ubuntu-latest
+    runs-on: captive-small
     timeout-minutes: 15
     env:
       PM: ${{ inputs.package-manager }}
