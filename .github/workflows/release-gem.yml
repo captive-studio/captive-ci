@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   release-gem:
-    runs-on: ubuntu-latest
+    runs-on: captive-small
     timeout-minutes: 15
     defaults:
       run:
