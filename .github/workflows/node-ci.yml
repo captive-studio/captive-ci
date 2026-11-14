@@ -19,7 +19,7 @@ on:
         required: false
         type: string
         # renovate: datasource=docker depName=ghcr.io/captive-studio/node-ci
-        default: ghcr.io/captive-studio/node-ci:26.13.0@sha256:28c6a728d8ae2bf911e73a04762aee6663f65f20934be72ce253761a7e7eb2f1
+        default: ghcr.io/captive-studio/node-ci:26.13.0@sha256:e0bcbb2e4173c804879e01b0701f2412c451bcd8693f905b930f6fee708b5ef8
 
       install-command:
         required: false
