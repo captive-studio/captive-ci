@@ -1,0 +1,124 @@
+name: Expo fix dependencies
+
+# Expo publie des correctifs du SDK qui rendent `expo install --check` rouge sur main
+# (paquets à aligner ensemble). Ce workflow applique `expo install --fix` et ouvre une PR.
+
+on:
+  workflow_call:
+    secrets:
+      token:
+        description: "Jeton qui pousse la branche et ouvre la PR. Une PR ouverte avec le GITHUB_TOKEN par défaut ne déclenche pas la CI : passer un jeton d'app ou un PAT pour que les checks tournent."
+        required: false
+
+    inputs:
+      working-directory:
+        description: "Dossier du projet Expo dans le dépôt."
+        required: false
+        type: string
+        default: "."
+
+      node-image:
+        description: "Image CI prééquipée avec Node, npm et Git."
+        required: false
+        type: string
+        # renovate: datasource=docker depName=ghcr.io/captive-studio/node-ci
+        default: ghcr.io/captive-studio/node-ci:26.13.1@sha256:57bd76214e11b8a99fab8db875439ad95bcb6e5b868277f264bf2186923ebe62
+
+      install-command:
+        required: false
+        type: string
+        default: npm ci --strict-peer-deps
+
+      expo-public-app-env:
+        required: false
+        type: string
+        default: staging
+
+      branch:
+        description: "Branche de la PR, réutilisée d'une exécution à l'autre."
+        required: false
+        type: string
+        default: expo/fix-dependencies
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: captive-small
+    timeout-minutes: 15
+    container:
+      image: ${{ inputs.node-image }}
+      volumes:
+        - /home/runner/.npm:/root/.npm
+    env:
+      EXPO_PUBLIC_APP_ENV: ${{ inputs.expo-public-app-env }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          token: ${{ secrets.token || github.token }}
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Check Expo dependencies
+        id: check
+        run: |
+          if npx expo install --check; then
+            echo "outdated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Versions exactes : convention des dépôts Captive (pas de ~ ni ^).
+      - name: Fix Expo dependencies
+        if: steps.check.outputs.outdated == 'true'
+        run: |
+          npx expo install --fix -- --save-exact
+          npx expo install --check
+
+      - name: Push branch
+        id: push
+        if: steps.check.outputs.outdated == 'true'
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if git diff --quiet; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -am "⬆️ Aligne les dépendances Expo sur les versions attendues par le SDK"
+          git push --force origin "$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: steps.push.outputs.pushed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BRANCH: ${{ inputs.branch }}
+        with:
+          github-token: ${{ secrets.token || github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const head = process.env.BRANCH;
+            const { data: open } = await github.rest.pulls.list({ owner, repo, head: `${owner}:${head}`, state: 'open' });
+            if (open.length > 0) {
+              core.info(`PR déjà ouverte : ${open[0].html_url}`);
+              return;
+            }
+            const { data: pr } = await github.rest.pulls.create({
+              owner, repo, head,
+              base: context.ref.replace('refs/heads/', ''),
+              title: '⬆️ Aligne les dépendances Expo sur les versions attendues par le SDK',
+              body: 'Généré par `expo install --fix` : `expo install --check` échouait sur la branche par défaut.',
+            });
+            core.info(`PR ouverte : ${pr.html_url}`);
