@@ -14,8 +14,8 @@ on:
       ruby-image:
         required: false
         type: string
-        # renovate: datasource=docker depName=ghcr.io/captive-studio/ruby-ci
-        default: ghcr.io/captive-studio/ruby-ci:4.0.10@sha256:77dd61f9c36b22332c9189b74b5c56316a1a4a56edb1645c83646771b12172f0
+        # Vide : ghcr.io/captive-studio/ruby-ci:<version Ruby du dépôt> (.tool-versions ou .ruby-version)
+        default: ""
 
       lint-command:
         required: false
@@ -46,12 +46,49 @@ on:
         default: rubycritic --no-browser app lib
 
 jobs:
+  # L'image CI suit la version Ruby du dépôt appelant : monter Ruby dans
+  # .tool-versions suffit, sans mettre à jour le SHA de captive-ci.
+  ruby_version:
+    if: github.ref_type == 'branch'
+    runs-on: captive-small
+    timeout-minutes: 5
+    outputs:
+      ruby-image: ${{ steps.resolve.outputs.ruby-image }}
+    steps:
+      - name: Checkout version files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            .tool-versions
+            .ruby-version
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve CI images
+        id: resolve
+        env:
+          RUBY_IMAGE: ${{ inputs.ruby-image }}
+        run: |
+          version=""
+          if [ -f .tool-versions ]; then
+            version=$(awk '$1 == "ruby" { print $2; exit }' .tool-versions)
+          fi
+          if [ -z "$version" ] && [ -f .ruby-version ]; then
+            version=$(sed 's/^ruby-//' .ruby-version | tr -d '[:space:]')
+          fi
+          if [ -z "$version" ] && [ -z "$RUBY_IMAGE" ]; then
+            echo "::error::Version Ruby introuvable : ajoutez « ruby X.Y.Z » dans .tool-versions (ou .ruby-version), ou passez l'image en input."
+            exit 1
+          fi
+          echo "ruby-image=${RUBY_IMAGE:-ghcr.io/captive-studio/ruby-ci:$version}" >> "$GITHUB_OUTPUT"
+          echo "Ruby $version"
+
   scan_ruby:
     if: github.ref_type == 'branch'
+    needs: ruby_version
     runs-on: captive-small
     timeout-minutes: 10
     container:
-      image: ${{ inputs.ruby-image }}
+      image: ${{ needs.ruby_version.outputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
 
@@ -75,10 +112,11 @@ jobs:
 
   lint:
     if: github.ref_type == 'branch'
+    needs: ruby_version
     runs-on: captive-small
     timeout-minutes: 10
     container:
-      image: ${{ inputs.ruby-image }}
+      image: ${{ needs.ruby_version.outputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
       RUBOCOP_CACHE_ROOT: tmp/rubocop
@@ -113,10 +151,11 @@ jobs:
 
   test:
     if: github.ref_type == 'branch'
+    needs: ruby_version
     runs-on: captive-small
     timeout-minutes: 10
     container:
-      image: ${{ inputs.ruby-image }}
+      image: ${{ needs.ruby_version.outputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
 
@@ -144,10 +183,11 @@ jobs:
 
   quality:
     if: github.ref_type == 'branch' && inputs.quality-command != ''
+    needs: ruby_version
     runs-on: captive-small
     timeout-minutes: 10
     container:
-      image: ${{ inputs.ruby-image }}
+      image: ${{ needs.ruby_version.outputs.ruby-image }}
     env:
       BUNDLE_PATH: vendor/bundle
 
@@ -192,7 +232,7 @@ jobs:
 
   notify_failure:
     if: failure() && github.ref == 'refs/heads/main'
-    needs: [scan_ruby, lint, test, quality]
+    needs: [ruby_version, scan_ruby, lint, test, quality]
     runs-on: captive-small
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.slack-webhook-url }}
