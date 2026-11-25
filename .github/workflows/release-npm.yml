@@ -19,6 +19,10 @@ on:
         description: "Package manager used by the repository: 'npm' (default) or 'pnpm'."
         type: string
         default: "npm"
+      runs-on:
+        description: "Runner du job. captive-small (512Mi) ne suffit pas pour l'install d'un gros monorepo : passer 'self-hosted'."
+        type: string
+        default: "captive-small"
 
 # Trusted publishing (OIDC) : npm délivre un jeton éphémère à chaque publication, aucun
 # NPM_TOKEN à stocker ni à renouveler. Chaque paquet déclare ce dépôt et le workflow
@@ -30,7 +34,7 @@ permissions:
 
 jobs:
   release-npm:
-    runs-on: captive-small
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 15
     env:
       PM: ${{ inputs.package-manager }}
