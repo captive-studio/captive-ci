@@ -109,7 +109,7 @@ jobs:
       - name: Enable corepack (yarn)
         run: corepack enable
 
-      - uses: ruby/setup-ruby@4e97ecde5048e1e0816923020652678063ffbf65 # v1.339.0
+      - uses: ruby/setup-ruby@145243922b4465b78e04dd66294782c7de45901f # v1.345.0
         with:
           ruby-version: ${{ inputs.ruby-version }}
           bundler-cache: true
@@ -190,7 +190,7 @@ jobs:
         with:
           node-version-file: ${{ inputs.node-version-file }}
 
-      - uses: ruby/setup-ruby@4e97ecde5048e1e0816923020652678063ffbf65 # v1.339.0
+      - uses: ruby/setup-ruby@145243922b4465b78e04dd66294782c7de45901f # v1.345.0
         with:
           ruby-version: ${{ inputs.ruby-version }}
           bundler-cache: true
